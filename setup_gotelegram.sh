@@ -29,7 +29,6 @@ install_deps() {
     if ! command -v qrencode &> /dev/null; then
         apt-get update && apt-get install -y qrencode || yum install -y qrencode
     fi
-    # Самокопирование для работы команды gotelegram
     if [ "$0" != "$BINARY_PATH" ]; then
         cp "$0" "$BINARY_PATH" && chmod +x "$BINARY_PATH"
     fi
@@ -41,7 +40,7 @@ get_ip() {
     echo "$ip" | grep -E -o '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -n 1
 }
 
-# --- ФУНКЦИЯ ПРОМО (ВЫЗЫВАЕТСЯ ПРИ УСТАНОВКЕ) ---
+# --- ФУНКЦИЯ ПРОМО ---
 show_promo() {
     clear
     echo -e "${MAGENTA}╔══════════════════════════════════════════════════════════════╗${NC}"
@@ -62,11 +61,10 @@ show_promo() {
     qrencode -t ANSIUTF8 "$PROMO_LINK"
     echo -e "${GREEN}Сканируйте для получения скидки на сервер!${NC}"
     echo -e "------------------------------------------------------"
-    echo -e "${CYAN}ВНИМАНИЕ: Сначала используйте промокод, затем ставьте прокси!${NC}"
-    read -p "Нажмите [ENTER], чтобы продолжить установку..."
+    read -p "Нажмите [ENTER], чтобы продолжить..."
 }
 
-# --- ВЫВОД ДАННЫХ ПАНЕЛИ ---
+# --- ПАНЕЛЬ ДАННЫХ ---
 show_config() {
     clear
     if ! docker ps | grep -q "mtproto-proxy"; then echo -e "${RED}Прокси не запущен!${NC}"; return; fi
@@ -83,56 +81,50 @@ show_config() {
     qrencode -t ANSIUTF8 "$CONF_LINK"
 }
 
-# --- ГЛАВНАЯ УСТАНОВКА ---
+# --- УСТАНОВКА ---
 menu_install() {
-    # 1. ОБЯЗАТЕЛЬНОЕ ПРОМО
-    show_promo 
-    
-    # 2. НАСТРОЙКА ПАРАМЕТРОВ
+    show_promo
     clear
     echo -e "${CYAN}--- Настройка маскировки (Fake TLS) ---${NC}"
     options=("habr.com" "google.com" "wikipedia.org" "rbc.ru" "Свой домен")
     for i in "${!options[@]}"; do echo -e "$((i+1))) ${options[$i]}"; done
     read -p "Выбор домена [1]: " d_idx
-    case $d_idx in 5) read -p "Домен: " DOMAIN ;; *) DOMAIN=${options[$((d_idx-1))]} ;; esac
+    case $d_idx in 
+        5) read -p "Домен: " DOMAIN ;; 
+        *) DOMAIN=${options[$((d_idx-1))]} ;; 
+    esac
     DOMAIN=${DOMAIN:-habr.com}
 
     read -p "Введите порт [443]: " PORT
     PORT=${PORT:-443}
     
-    echo -e "${YELLOW}Запуск контейнера...${NC}"
     SECRET=$(docker run --rm nineseconds/mtg:2 generate-secret --hex "$DOMAIN")
     docker stop mtproto-proxy &>/dev/null; docker rm mtproto-proxy &>/dev/null
     docker run -d --name mtproto-proxy --restart always -p "$PORT":"$PORT" \
         nineseconds/mtg:2 simple-run -n 1.1.1.1 -i prefer-ipv4 0.0.0.0:"$PORT" "$SECRET" > /dev/null
     
     show_config
-    echo -e "${GREEN}Установка завершена успешно!${NC}"
-    read -p "Нажмите Enter для возврата в меню..."
+    read -p "Готово! Нажмите Enter..."
 }
 
-# --- ВЫХОД (ПАНЕЛЬ ДАННЫХ + ДОНАТ) ---
+# --- ВЫХОД ---
 show_exit() {
     clear
-    echo -e "${GREEN}=== ФИНАЛЬНЫЕ ДАННЫЕ ПРОКСИ ===${NC}"
+    echo -e "${GREEN}=== ПАНЕЛЬ ДАННЫХ (RU) ===${NC}"
     if docker ps | grep -q "mtproto-proxy"; then
         SECRET=$(docker inspect mtproto-proxy --format='{{range .Config.Cmd}}{{.}} {{end}}' | awk '{print $NF}')
         IP=$(get_ip)
         PORT=$(docker inspect mtproto-proxy --format='{{range $p, $conf := .HostConfig.PortBindings}}{{(index $conf 0).HostPort}}{{end}}' 2>/dev/null)
         echo -e "IP: $IP | Port: ${PORT:-443}"
-        echo -e "Link: tg://proxy?server=$IP&port=${PORT:-443}&secret=$SECRET"
-    else
-        echo -e "Прокси не был запущен."
+        echo -e "tg://proxy?server=$IP&port=${PORT:-443}&secret=$SECRET"
     fi
-    
     echo -e "\n${MAGENTA}💰 БЛАГОДАРНОСТЬ АВТОРУ (CloudTips)${NC}"
     qrencode -t ANSIUTF8 "$TIP_LINK"
-    echo -e "Донат: ${YELLOW}$TIP_LINK${NC}"
-    echo -e "YouTube: ${CYAN}https://www.youtube.com/@antenkaru${NC}"
-    echo -e "\n${GREEN}До встречи!${NC}"
+    echo -e "Донат: $TIP_LINK"
+    exit 0
 }
 
-# --- СТАРТ ---
+# --- ЗАПУСК ---
 check_root
 install_deps
 
@@ -142,6 +134,14 @@ while true; do
     echo -e "2) Показать данные подключения (QR)${NC}"
     echo -e "3) ${YELLOW}Показать PROMO (Скидки на VPS)${NC}"
     echo -e "4) ${RED}Удалить прокси${NC}"
-    echo -e "0) Выход (и донат)${NC}"
+    echo -e "0) Выход${NC}"
     read -p "Выберите пункт: " m_idx
     case $m_idx in
+        1) menu_install ;;
+        2) show_config; read -p "Нажмите Enter..." ;;
+        3) show_promo ;;
+        4) docker stop mtproto-proxy && docker rm mtproto-proxy && echo "Удалено" ;;
+        0) show_exit ;;
+        *) echo "Неверный ввод" ;;
+    esac
+done
