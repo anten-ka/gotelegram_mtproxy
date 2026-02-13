@@ -44,7 +44,7 @@ get_ip() {
     echo "$ip" | grep -E -o '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -n 1
 }
 
-# --- ПРОМО БЛОК (ПОЛНЫЙ СПИСОК) ---
+# --- ПРОМО БЛОК (С ИСПРАВЛЕННЫМ ВЫВОДОМ) ---
 show_promo() {
     clear
     echo -e "${MAGENTA}╔══════════════════════════════════════════════════════════════╗${NC}"
@@ -68,10 +68,11 @@ show_promo() {
     echo -e "\n"
     qrencode -t ANSIUTF8 "$PROMO_LINK"
     echo -e "${GREEN}Сканируйте камерой телефона для получения скидки!${NC}"
-    read -p "Нажмите Enter, чтобы перейти к настройке прокси..."
+    echo -e "------------------------------------------------------"
+    read -p "Нажмите [ENTER] чтобы перейти к установке прокси..."
 }
 
-# --- ПАНЕЛЬ ДАННЫХ ---
+# --- ВЫВОД ДАННЫХ ---
 show_config() {
     clear
     if ! docker ps | grep -q "mtproto-proxy"; then echo -e "${RED}Прокси не запущен!${NC}"; return; fi
@@ -87,26 +88,19 @@ show_config() {
     echo -e "\n${BLUE}$CONF_LINK${NC}\n"
     qrencode -t ANSIUTF8 "$CONF_LINK"
     echo -e "${YELLOW}КАК ИМПОРТИРОВАТЬ:${NC}"
-    echo -e "1) Кликните по ссылке выше в терминале"
+    echo -e "1) Кликните по ссылке в терминале"
     echo -e "2) Сосканируйте QR-код телефоном"
     echo -e "------------------------------------------------------"
 }
 
-run_container() {
-    local domain=$1; local port=$2
-    echo -e "${YELLOW}Подготовка контейнера...${NC}"
-    SECRET=$(docker run --rm nineseconds/mtg:2 generate-secret --hex "$domain")
-    docker stop mtproto-proxy &>/dev/null; docker rm mtproto-proxy &>/dev/null
-    docker run -d --name mtproto-proxy --restart always -p "$port":"$port" \
-        nineseconds/mtg:2 simple-run -n 1.1.1.1 -i prefer-ipv4 0.0.0.0:"$port" "$SECRET" > /dev/null
-    show_config
-}
-
-# --- МЕНЮ ---
+# --- УСТАНОВКА ---
 menu_install() {
-    clear
+    # Сначала показываем промо
     show_promo
-    echo -e "\n${CYAN}--- Настройка маскировки (Fake TLS) ---${NC}"
+    
+    # Затем настройка
+    clear
+    echo -e "${CYAN}--- Настройка маскировки (Fake TLS) ---${NC}"
     options=("habr.com" "google.com" "wikipedia.org" "rbc.ru" "Свой домен")
     for i in "${!options[@]}"; do echo -e "$((i+1))) ${options[$i]}"; done
     read -p "Выбор домена [1]: " d_idx
@@ -115,7 +109,15 @@ menu_install() {
 
     read -p "Введите порт [443]: " PORT
     PORT=${PORT:-443}
-    run_container "$DOMAIN" "$PORT"
+    
+    echo -e "${YELLOW}Запуск контейнера...${NC}"
+    SECRET=$(docker run --rm nineseconds/mtg:2 generate-secret --hex "$DOMAIN")
+    docker stop mtproto-proxy &>/dev/null; docker rm mtproto-proxy &>/dev/null
+    docker run -d --name mtproto-proxy --restart always -p "$PORT":"$PORT" \
+        nineseconds/mtg:2 simple-run -n 1.1.1.1 -i prefer-ipv4 0.0.0.0:"$PORT" "$SECRET" > /dev/null
+    
+    show_config
+    read -p "Нажмите Enter для возврата в меню..."
 }
 
 show_exit() {
