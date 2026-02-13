@@ -18,4 +18,4 @@
 Просто скопируйте эту команду и вставьте в терминал вашего сервера (работает на Ubuntu/Debian/CentOS):
 
 ```bash
-wget -O setup.sh https://raw.githubusercontent.com/anten-ka/gotelegram_mtproxy/main/gotelegram.sh&& chmod +x gotelegram.sh && sudo gotelegram.sh
+wget -O setup_gotelegram.sh https://raw.githubusercontent.com/anten-ka/gotelegram_mtproxy/main/setup_gotelegram.sh && chmod +x setup_gotelegram.sh && sudo ./setup_gotelegram.sh
