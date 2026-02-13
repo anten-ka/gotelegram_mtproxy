@@ -29,7 +29,6 @@ install_deps() {
     if ! command -v qrencode &> /dev/null; then
         apt-get update && apt-get install -y qrencode || yum install -y qrencode
     fi
-    # Регистрация команды
     cp "$0" "$BINARY_PATH" && chmod +x "$BINARY_PATH"
 }
 
@@ -39,30 +38,26 @@ get_ip() {
     echo "$ip" | grep -E -o '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -n 1
 }
 
-# --- 1) ФУНКЦИЯ ПРОМОКОДОВ ---
+# --- 1) ПРОМО ПРИ ЗАПУСКЕ ---
 show_promo() {
     clear
     echo -e "${MAGENTA}╔══════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${MAGENTA}║          ХОСТИНГ, КОТОРЫЙ РАБОТАЕТ СО СКИДКОЙ ДО -60%         ║${NC}"
+    echo -e "${MAGENTA}║          ХОСТИНГ СО СКИДКОЙ ДО -60% ОТ ANTEN-KA              ║${NC}"
     echo -e "${MAGENTA}╚══════════════════════════════════════════════════════════════╝${NC}"
     echo -e "${CYAN}  >>> Ссылка: $PROMO_LINK ${NC}"
     echo -e "\n${MAGENTA}❖ •••••••••••••••••• АКТУАЛЬНЫЕ ПРОМОКОДЫ •••••••••••••••••• ❖${NC}"
     printf "  ${YELLOW}%-12s${NC} : ${WHITE}%s${NC}\n" "OFF60" "Скидка 60% на ПЕРВЫЙ МЕСЯЦ"
-    echo -e "${BLUE}  ---------------------------------------------------------- ${NC}"
-    printf "  ${YELLOW}%-12s${NC} : ${WHITE}%s${NC}\n" "antenka20" "Буст 20% + 3% (при оплате за 3 МЕС)"
-    echo -e "${BLUE}  ---------------------------------------------------------- ${NC}"
-    printf "  ${YELLOW}%-12s${NC} : ${WHITE}%s${NC}\n" "antenka6" "Буст 15% + 5% (при оплате за 6 МЕС)"
-    echo -e "${BLUE}  ---------------------------------------------------------- ${NC}"
-    printf "  ${YELLOW}%-12s${NC} : ${WHITE}%s${NC}\n" "antenka12" "Буст 5% + 5% (при оплате за 12 МЕС)"
+    printf "  ${YELLOW}%-12s${NC} : ${WHITE}%s${NC}\n" "antenka20" "Буст 20% + 3% (оплата за 3 МЕС)"
+    printf "  ${YELLOW}%-12s${NC} : ${WHITE}%s${NC}\n" "antenka6" "Буст 15% + 5% (оплата за 6 МЕС)"
+    printf "  ${YELLOW}%-12s${NC} : ${WHITE}%s${NC}\n" "antenka12" "Буст 5% + 5% (оплата за 12 МЕС)"
     echo -e "${MAGENTA}❖ •••••••••••••••••••••••••••••••••••••••••••••••••••••••••• ❖${NC}"
-    echo -e "\n${YELLOW}[*] Генерация QR-кода на скидку...${NC}"
     qrencode -t ANSIUTF8 "$PROMO_LINK"
-    echo -e "${GREEN}Сканируйте камерой для скидки!${NC}"
+    echo -e "${GREEN}Сканируйте QR для перехода на хостинг${NC}"
     echo -e "------------------------------------------------------"
-    read -p "ПРОЧИТАЛИ? Нажмите [ENTER] для перехода к настройке..."
+    read -p "Нажмите [ENTER], чтобы войти в меню управления..."
 }
 
-# --- ВЫВОД ПАНЕЛИ ДАННЫХ ---
+# --- ПАНЕЛЬ ДАННЫХ ---
 show_config() {
     if ! docker ps | grep -q "mtproto-proxy"; then echo -e "${RED}Прокси не найден!${NC}"; return; fi
     SECRET=$(docker inspect mtproto-proxy --format='{{range .Config.Cmd}}{{.}} {{end}}' | awk '{print $NF}')
@@ -78,53 +73,71 @@ show_config() {
     qrencode -t ANSIUTF8 "$LINK"
 }
 
-# --- 2) УСТАНОВКА БЕЗ ОШИБОК ---
+# --- УСТАНОВКА ---
 menu_install() {
-    show_promo # Сначала промокоды и пауза
-    
     clear
-    echo -e "${CYAN}--- Настройка Fake TLS ---${NC}"
-    options=("habr.com" "google.com" "wikipedia.org" "rbc.ru")
-    for i in "${!options[@]}"; do echo -e "$((i+1))) ${options[$i]}"; done
-    read -p "Выберите домен [1]: " d_idx
-    DOMAIN=${options[$((d_idx-1))]}
-    DOMAIN=${DOMAIN:-habr.com}
-
-    read -p "Введите порт [443]: " PORT
-    PORT=${PORT:-443}
+    echo -e "${CYAN}--- Выберите домен для маскировки (Fake TLS) ---${NC}"
+    domains=(
+        "google.com" "wikipedia.org" "habr.com" "github.com" 
+        "coursera.org" "udemy.com" "medium.com" "stackoverflow.com"
+        "bbc.com" "cnn.com" "reuters.com" "nytimes.com"
+        "lenta.ru" "rbc.ru" "ria.ru" "kommersant.ru"
+        "stepik.org" "duolingo.com" "khanacademy.org" "ted.com"
+    )
     
-    echo -e "${YELLOW}[*] Запуск прокси...${NC}"
+    for i in "${!domains[@]}"; do
+        printf "${YELLOW}%2d)${NC} %-20s " "$((i+1))" "${domains[$i]}"
+        [[ $(( (i+1) % 2 )) -eq 0 ]] && echo ""
+    done
+    
+    read -p "Ваш выбор [1-20]: " d_idx
+    DOMAIN=${domains[$((d_idx-1))]}
+    DOMAIN=${DOMAIN:-google.com}
+
+    echo -e "\n${CYAN}--- Выберите порт ---${NC}"
+    echo -e "1) 443 (Рекомендуется)"
+    echo -e "2) 8443"
+    echo -e "3) Свой порт"
+    read -p "Выбор: " p_choice
+    case $p_choice in
+        2) PORT=8443 ;;
+        3) read -p "Введите свой порт: " PORT ;;
+        *) PORT=443 ;;
+    esac
+
+    echo -e "${YELLOW}[*] Настройка прокси...${NC}"
     SECRET=$(docker run --rm nineseconds/mtg:2 generate-secret --hex "$DOMAIN")
-    docker stop mtproto-proxy &>/dev/null
-    docker rm mtproto-proxy &>/dev/null
+    docker stop mtproto-proxy &>/dev/null && docker rm mtproto-proxy &>/dev/null
     
     docker run -d --name mtproto-proxy --restart always -p "$PORT":"$PORT" \
         nineseconds/mtg:2 simple-run -n 1.1.1.1 -i prefer-ipv4 0.0.0.0:"$PORT" "$SECRET" > /dev/null
     
     clear
     show_config
-    read -p "Нажмите Enter для возврата в меню..."
+    read -p "Установка завершена. Нажмите Enter..."
 }
 
-# --- ВЫХОД С ТИПСАМИ ---
+# --- ВЫХОД ---
 show_exit() {
     clear
-    show_config # Показываем данные перед уходом
+    show_config
     echo -e "\n${MAGENTA}💰 ПОДДЕРЖКА АВТОРА (CloudTips)${NC}"
     qrencode -t ANSIUTF8 "$TIP_LINK"
     echo -e "Донат: $TIP_LINK"
+    echo -e "YouTube: https://www.youtube.com/@antenkaru"
     exit 0
 }
 
-# --- ГЛАВНЫЙ ЦИКЛ ---
+# --- СТАРТ СКРИПТА ---
 check_root
 install_deps
+show_promo # Промо теперь только один раз при старте
 
 while true; do
     echo -e "\n${MAGENTA}=== GoTelegram Manager (by anten-ka) ===${NC}"
     echo -e "1) ${GREEN}Установить / Обновить прокси${NC}"
     echo -e "2) Показать данные подключения${NC}"
-    echo -e "3) ${YELLOW}Показать PROMO (Скидки)${NC}"
+    echo -e "3) ${YELLOW}Показать PROMO снова${NC}"
     echo -e "4) ${RED}Удалить прокси${NC}"
     echo -e "0) Выход${NC}"
     read -p "Пункт: " m_idx
@@ -134,6 +147,6 @@ while true; do
         3) show_promo ;;
         4) docker stop mtproto-proxy && docker rm mtproto-proxy && echo "Удалено" ;;
         0) show_exit ;;
-        *) echo "Неверный выбор" ;;
+        *) echo "Неверный ввод" ;;
     esac
 done
