@@ -95,7 +95,16 @@ show_promo() {
 show_current_config() {
     if ! docker ps | grep -q "mtproto-proxy"; then echo -e "${RED}Прокси не запущен.${NC}"; return; fi
     SECRET=$(docker inspect mtproto-proxy --format='{{range .Config.Cmd}}{{.}} {{end}}' | awk '{print $NF}')
-    IP=$(curl -s --max-time 5 https://api.ipify.org || curl -s --max-time 5 https://ifconfig.me || curl -s --max-time 5 https://ident.me | grep -E -o '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -n 1)
+    # Используем альтернативные сервисы и жесткую фильтрацию только цифр
+    IP=$(curl -s -4 https://icanhazip.com || curl -s -4 https://ipinfo.io/ip || curl -s -4 https://checkip.amazonaws.com)
+    
+    # Убираем любые лишние символы, если сервис вернул HTML или мусор
+    IP=$(echo "$IP" | grep -E -o '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -n 1)
+
+    # Если совсем ничего не помогло, берем внутренний IP сервера
+    if [[ -z "$IP" ]]; then 
+        IP=$(hostname -I | awk '{print $1}')
+    fi
     CONF_LINK="tg://proxy?server=$IP&port=443&secret=$SECRET"
     
     echo -e "${GREEN}=== ПАНЕЛЬ ДАННЫХ (RU) ===${NC}"
