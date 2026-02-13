@@ -18,4 +18,4 @@
 Просто скопируйте эту команду и вставьте в терминал вашего сервера (работает на Ubuntu/Debian/CentOS):
 
 ```bash
-wget -qO- [https://raw.githubusercontent.com/anten-ka/gotelegram_mtproxy/main/setup_gotelegram.sh](https://raw.githubusercontent.com/anten-ka/gotelegram_mtproxy/main/setup_gotelegram.sh) | sudo bash
+wget -qO- https://raw.githubusercontent.com/anten-ka/gotelegram_mtproxy/main/setup_gotelegram.sh | sudo bash
