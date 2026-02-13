@@ -16,7 +16,7 @@ BLUE='\033[0;34m'
 WHITE='\033[1;37m'
 NC='\033[0m'
 
-# --- ПОДГОТОВКА ---
+# --- СИСТЕМНЫЕ ФУНКЦИИ ---
 check_root() {
     if [ "$EUID" -ne 0 ]; then echo -e "${RED}Ошибка: запустите через sudo!${NC}"; exit 1; fi
 }
@@ -40,7 +40,7 @@ get_ip() {
     echo "$ip" | grep -E -o '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -n 1
 }
 
-# --- ФУНКЦИЯ ПРОМО ---
+# --- БЛОК ПРОМОКОДОВ (Обязательный при установке) ---
 show_promo() {
     clear
     echo -e "${MAGENTA}╔══════════════════════════════════════════════════════════════╗${NC}"
@@ -61,7 +61,7 @@ show_promo() {
     qrencode -t ANSIUTF8 "$PROMO_LINK"
     echo -e "${GREEN}Сканируйте для получения скидки на сервер!${NC}"
     echo -e "------------------------------------------------------"
-    read -p "Нажмите [ENTER], чтобы продолжить..."
+    read -p "Нажмите [ENTER], чтобы продолжить установку..."
 }
 
 # --- ПАНЕЛЬ ДАННЫХ ---
@@ -83,7 +83,7 @@ show_config() {
 
 # --- УСТАНОВКА ---
 menu_install() {
-    show_promo
+    show_promo  # ВЫЗОВ ПРОМОКОДОВ
     clear
     echo -e "${CYAN}--- Настройка маскировки (Fake TLS) ---${NC}"
     options=("habr.com" "google.com" "wikipedia.org" "rbc.ru" "Свой домен")
@@ -104,10 +104,10 @@ menu_install() {
         nineseconds/mtg:2 simple-run -n 1.1.1.1 -i prefer-ipv4 0.0.0.0:"$PORT" "$SECRET" > /dev/null
     
     show_config
-    read -p "Готово! Нажмите Enter..."
+    read -p "Нажмите Enter для возврата..."
 }
 
-# --- ВЫХОД ---
+# --- ВЫХОД (ДАННЫЕ + ТИПСЫ) ---
 show_exit() {
     clear
     echo -e "${GREEN}=== ПАНЕЛЬ ДАННЫХ (RU) ===${NC}"
@@ -124,7 +124,7 @@ show_exit() {
     exit 0
 }
 
-# --- ЗАПУСК ---
+# --- ЗАПУСК СКРИПТА ---
 check_root
 install_deps
 
@@ -135,13 +135,13 @@ while true; do
     echo -e "3) ${YELLOW}Показать PROMO (Скидки на VPS)${NC}"
     echo -e "4) ${RED}Удалить прокси${NC}"
     echo -e "0) Выход${NC}"
-    read -p "Выберите пункт: " m_idx
+    read -p "Пункт: " m_idx
     case $m_idx in
         1) menu_install ;;
-        2) show_config; read -p "Нажмите Enter..." ;;
+        2) show_config; read -p "Enter..." ;;
         3) show_promo ;;
         4) docker stop mtproto-proxy && docker rm mtproto-proxy && echo "Удалено" ;;
         0) show_exit ;;
-        *) echo "Неверный ввод" ;;
+        *) echo "Ошибка ввода" ;;
     esac
 done
