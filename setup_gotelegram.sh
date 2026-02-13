@@ -16,7 +16,7 @@ BLUE='\033[0;34m'
 WHITE='\033[1;37m'
 NC='\033[0m'
 
-# --- СЕРВИСНЫЕ ФУНКЦИИ ---
+# --- ПОДГОТОВКА ---
 check_root() {
     if [ "$EUID" -ne 0 ]; then echo -e "${RED}Ошибка: запустите через sudo!${NC}"; exit 1; fi
 }
@@ -29,7 +29,10 @@ install_deps() {
     if ! command -v qrencode &> /dev/null; then
         apt-get update && apt-get install -y qrencode || yum install -y qrencode
     fi
-    cp "$0" "$BINARY_PATH" && chmod +x "$BINARY_PATH"
+    # Самокопирование для работы команды gotelegram
+    if [ "$0" != "$BINARY_PATH" ]; then
+        cp "$0" "$BINARY_PATH" && chmod +x "$BINARY_PATH"
+    fi
 }
 
 get_ip() {
@@ -38,13 +41,13 @@ get_ip() {
     echo "$ip" | grep -E -o '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -n 1
 }
 
-# --- ФУНКЦИЯ ПРОМО (ОБЯЗАТЕЛЬНАЯ) ---
+# --- ФУНКЦИЯ ПРОМО (ВЫЗЫВАЕТСЯ ПРИ УСТАНОВКЕ) ---
 show_promo() {
     clear
     echo -e "${MAGENTA}╔══════════════════════════════════════════════════════════════╗${NC}"
     echo -e "${MAGENTA}║          ХОСТИНГ, КОТОРЫЙ РАБОТАЕТ СО СКИДКОЙ ДО -60%         ║${NC}"
     echo -e "${MAGENTA}╚══════════════════════════════════════════════════════════════╝${NC}"
-    echo -e "${CYAN}  >>> $PROMO_LINK ${NC}"
+    echo -e "${CYAN}  >>> Ссылка: $PROMO_LINK ${NC}"
     echo -e "\n${MAGENTA}❖ •••••••••••••••••• АКТУАЛЬНЫЕ ПРОМОКОДЫ •••••••••••••••••• ❖${NC}"
     printf "  ${YELLOW}%-12s${NC} : ${WHITE}%s${NC}\n" "OFF60" "Скидка 60% на ПЕРВЫЙ МЕСЯЦ"
     echo -e "${BLUE}  ---------------------------------------------------------- ${NC}"
@@ -56,14 +59,14 @@ show_promo() {
     echo -e "${MAGENTA}❖ •••••••••••••••••••••••••••••••••••••••••••••••••••••••••• ❖${NC}"
     
     echo -e "\n${YELLOW}Генерация QR-кода на скидку...${NC}"
-    sleep 2
     qrencode -t ANSIUTF8 "$PROMO_LINK"
     echo -e "${GREEN}Сканируйте для получения скидки на сервер!${NC}"
     echo -e "------------------------------------------------------"
+    echo -e "${CYAN}ВНИМАНИЕ: Сначала используйте промокод, затем ставьте прокси!${NC}"
     read -p "Нажмите [ENTER], чтобы продолжить установку..."
 }
 
-# --- ПАНЕЛЬ ДАННЫХ ---
+# --- ВЫВОД ДАННЫХ ПАНЕЛИ ---
 show_config() {
     clear
     if ! docker ps | grep -q "mtproto-proxy"; then echo -e "${RED}Прокси не запущен!${NC}"; return; fi
@@ -80,10 +83,12 @@ show_config() {
     qrencode -t ANSIUTF8 "$CONF_LINK"
 }
 
-# --- УСТАНОВКА ---
+# --- ГЛАВНАЯ УСТАНОВКА ---
 menu_install() {
-    show_promo  # ВЫЗОВ ПРОМО ПЕРЕД УСТАНОВКОЙ
+    # 1. ОБЯЗАТЕЛЬНОЕ ПРОМО
+    show_promo 
     
+    # 2. НАСТРОЙКА ПАРАМЕТРОВ
     clear
     echo -e "${CYAN}--- Настройка маскировки (Fake TLS) ---${NC}"
     options=("habr.com" "google.com" "wikipedia.org" "rbc.ru" "Свой домен")
@@ -95,36 +100,39 @@ menu_install() {
     read -p "Введите порт [443]: " PORT
     PORT=${PORT:-443}
     
-    echo -e "${YELLOW}Запуск MTProxy контейнера...${NC}"
+    echo -e "${YELLOW}Запуск контейнера...${NC}"
     SECRET=$(docker run --rm nineseconds/mtg:2 generate-secret --hex "$DOMAIN")
     docker stop mtproto-proxy &>/dev/null; docker rm mtproto-proxy &>/dev/null
     docker run -d --name mtproto-proxy --restart always -p "$PORT":"$PORT" \
         nineseconds/mtg:2 simple-run -n 1.1.1.1 -i prefer-ipv4 0.0.0.0:"$PORT" "$SECRET" > /dev/null
     
     show_config
-    echo -e "${YELLOW}Установка завершена!${NC}"
+    echo -e "${GREEN}Установка завершена успешно!${NC}"
     read -p "Нажмите Enter для возврата в меню..."
 }
 
-# --- ВЫХОД С QR НА ТИПСЫ ---
+# --- ВЫХОД (ПАНЕЛЬ ДАННЫХ + ДОНАТ) ---
 show_exit() {
     clear
-    echo -e "${GREEN}=== ПАНЕЛЬ ДАННЫХ (RU) ===${NC}"
-    # Повторим вывод конфига перед выходом, чтобы он был последним в истории
+    echo -e "${GREEN}=== ФИНАЛЬНЫЕ ДАННЫЕ ПРОКСИ ===${NC}"
     if docker ps | grep -q "mtproto-proxy"; then
         SECRET=$(docker inspect mtproto-proxy --format='{{range .Config.Cmd}}{{.}} {{end}}' | awk '{print $NF}')
         IP=$(get_ip)
         PORT=$(docker inspect mtproto-proxy --format='{{range $p, $conf := .HostConfig.PortBindings}}{{(index $conf 0).HostPort}}{{end}}' 2>/dev/null)
         echo -e "IP: $IP | Port: ${PORT:-443}"
-        echo -e "tg://proxy?server=$IP&port=${PORT:-443}&secret=$SECRET"
+        echo -e "Link: tg://proxy?server=$IP&port=${PORT:-443}&secret=$SECRET"
+    else
+        echo -e "Прокси не был запущен."
     fi
+    
     echo -e "\n${MAGENTA}💰 БЛАГОДАРНОСТЬ АВТОРУ (CloudTips)${NC}"
     qrencode -t ANSIUTF8 "$TIP_LINK"
     echo -e "Донат: ${YELLOW}$TIP_LINK${NC}"
     echo -e "YouTube: ${CYAN}https://www.youtube.com/@antenkaru${NC}"
-    echo -e "\n${GREEN}Удачи!${NC}"
+    echo -e "\n${GREEN}До встречи!${NC}"
 }
 
+# --- СТАРТ ---
 check_root
 install_deps
 
@@ -137,10 +145,3 @@ while true; do
     echo -e "0) Выход (и донат)${NC}"
     read -p "Выберите пункт: " m_idx
     case $m_idx in
-        1) menu_install ;;
-        2) show_config; read -p "Нажмите Enter..." ;;
-        3) show_promo ;;
-        4) docker stop mtproto-proxy && docker rm mtproto-proxy && echo -e "${GREEN}Удалено!${NC}" ;;
-        0) show_exit; exit 0 ;;
-    esac
-done
