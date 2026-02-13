@@ -24,7 +24,7 @@ type_text() {
 }
 
 check_root() {
-    if [ "$EUID" -ne 0 ]; then echo -e "${RED}Ошибка: sudo!${NC}"; exit 1; fi
+    if [ "$EUID" -ne 0 ]; then echo -e "${RED}Ошибка: запустите через sudo!${NC}"; exit 1; fi
 }
 
 install_deps() {
@@ -44,7 +44,7 @@ get_ip() {
     echo "$ip" | grep -E -o '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -n 1
 }
 
-# --- ПРОМО БЛОК ---
+# --- ПРОМО БЛОК (ПОЛНЫЙ СПИСОК) ---
 show_promo() {
     clear
     echo -e "${MAGENTA}╔══════════════════════════════════════════════════════════════╗${NC}"
@@ -53,38 +53,48 @@ show_promo() {
     echo -ne "${CYAN}"
     type_text "  >>> $PROMO_LINK"
     echo -ne "${NC}"
-    echo -e "\n${MAGENTA}❖ •••••••••••••••••• PROMO CODES ••••••••••••••••••• ❖${NC}"
-    printf "  ${YELLOW}%-12s${NC} : ${WHITE}%s${NC}\n" "OFF60" "60% скидка на первый месяц"
-    printf "  ${YELLOW}%-12s${NC} : ${WHITE}%s${NC}\n" "antenka20" "Буст 20% + 3% (от 3 мес)"
-    printf "  ${YELLOW}%-12s${NC} : ${WHITE}%s${NC}\n" "antenka12" "Буст 5% + 5% (от 12 мес)"
-    echo -e "${MAGENTA}❖ •••••••••••••••••••••••••••••••••••••••••••••••••• ❖${NC}"
-    echo -e "\n${YELLOW}Генерация QR-кода... (5 сек)${NC}"
+    echo -e "\n${MAGENTA}❖ •••••••••••••••••• АКТУАЛЬНЫЕ ПРОМОКОДЫ •••••••••••••••••• ❖${NC}"
+    printf "  ${YELLOW}%-12s${NC} : ${WHITE}%s${NC}\n" "OFF60" "Скидка 60% на ПЕРВЫЙ МЕСЯЦ"
+    echo -e "${BLUE}  ---------------------------------------------------------- ${NC}"
+    printf "  ${YELLOW}%-12s${NC} : ${WHITE}%s${NC}\n" "antenka20" "Буст 20% + 3% (при оплате за 3 МЕС)"
+    echo -e "${BLUE}  ---------------------------------------------------------- ${NC}"
+    printf "  ${YELLOW}%-12s${NC} : ${WHITE}%s${NC}\n" "antenka6" "Буст 15% + 5% (при оплате за 6 МЕС)"
+    echo -e "${BLUE}  ---------------------------------------------------------- ${NC}"
+    printf "  ${YELLOW}%-12s${NC} : ${WHITE}%s${NC}\n" "antenka12" "Буст 5% + 5% (при оплате за 12 МЕС)"
+    echo -e "${MAGENTA}❖ •••••••••••••••••••••••••••••••••••••••••••••••••••••••••• ❖${NC}"
+    
+    echo -e "\n${YELLOW}Генерация QR-кода на хостинг... (5 сек)${NC}"
     for i in {5..1}; do echo -ne "$i..."; sleep 1; done
     echo -e "\n"
     qrencode -t ANSIUTF8 "$PROMO_LINK"
-    echo -e "${GREEN}Сканируйте камерой телефона для перехода!${NC}"
-    read -p "Нажмите Enter, чтобы продолжить..."
+    echo -e "${GREEN}Сканируйте камерой телефона для получения скидки!${NC}"
+    read -p "Нажмите Enter, чтобы перейти к настройке прокси..."
 }
 
-# --- КОНФИГУРАЦИЯ И ВЫВОД ---
+# --- ПАНЕЛЬ ДАННЫХ ---
 show_config() {
     clear
     if ! docker ps | grep -q "mtproto-proxy"; then echo -e "${RED}Прокси не запущен!${NC}"; return; fi
     SECRET=$(docker inspect mtproto-proxy --format='{{range .Config.Cmd}}{{.}} {{end}}' | awk '{print $NF}')
     IP=$(get_ip)
     PORT=$(docker inspect mtproto-proxy --format='{{range $p, $conf := .HostConfig.PortBindings}}{{(index $conf 0).HostPort}}{{end}}' 2>/dev/null)
-    CONF_LINK="tg://proxy?server=$IP&port=${PORT:-443}&secret=$SECRET"
+    PORT=${PORT:-443}
+    CONF_LINK="tg://proxy?server=$IP&port=$PORT&secret=$SECRET"
 
     echo -e "${GREEN}=== ПАНЕЛЬ ДАННЫХ (RU) ===${NC}"
     echo -e "IP: ${CYAN}$IP${NC} | Порт: ${CYAN}$PORT${NC}"
     echo -e "Secret: ${CYAN}$SECRET${NC}"
     echo -e "\n${BLUE}$CONF_LINK${NC}\n"
     qrencode -t ANSIUTF8 "$CONF_LINK"
-    echo -e "${YELLOW}Подключитесь через QR или ссылку выше.${NC}"
+    echo -e "${YELLOW}КАК ИМПОРТИРОВАТЬ:${NC}"
+    echo -e "1) Кликните по ссылке выше в терминале"
+    echo -e "2) Сосканируйте QR-код телефоном"
+    echo -e "------------------------------------------------------"
 }
 
 run_container() {
     local domain=$1; local port=$2
+    echo -e "${YELLOW}Подготовка контейнера...${NC}"
     SECRET=$(docker run --rm nineseconds/mtg:2 generate-secret --hex "$domain")
     docker stop mtproto-proxy &>/dev/null; docker rm mtproto-proxy &>/dev/null
     docker run -d --name mtproto-proxy --restart always -p "$port":"$port" \
@@ -96,10 +106,10 @@ run_container() {
 menu_install() {
     clear
     show_promo
-    echo -e "\n${CYAN}--- Настройка маскировки ---${NC}"
+    echo -e "\n${CYAN}--- Настройка маскировки (Fake TLS) ---${NC}"
     options=("habr.com" "google.com" "wikipedia.org" "rbc.ru" "Свой домен")
     for i in "${!options[@]}"; do echo -e "$((i+1))) ${options[$i]}"; done
-    read -p "Домен [1]: " d_idx
+    read -p "Выбор домена [1]: " d_idx
     case $d_idx in 5) read -p "Домен: " DOMAIN ;; *) DOMAIN=${options[$((d_idx-1))]} ;; esac
     DOMAIN=${DOMAIN:-habr.com}
 
@@ -110,11 +120,11 @@ menu_install() {
 
 show_exit() {
     clear
-    echo -e "${MAGENTA}💰 ПОДДЕРЖКА АВТОРА И КАНАЛА${NC}"
+    echo -e "${MAGENTA}💰 БЛАГОДАРНОСТЬ АВТОРУ (CloudTips)${NC}"
     qrencode -t ANSIUTF8 "$TIP_LINK"
-    echo -e "CloudTips: ${YELLOW}$TIP_LINK${NC}"
+    echo -e "Ссылка на донат: ${YELLOW}$TIP_LINK${NC}"
     echo -e "YouTube: ${CYAN}https://www.youtube.com/@antenkaru${NC}"
-    echo -e "\n${GREEN}Спасибо, что вы с нами!${NC}"
+    echo -e "\n${GREEN}Спасибо за использование скрипта!${NC}"
 }
 
 check_root
@@ -127,12 +137,12 @@ while true; do
     echo -e "3) ${YELLOW}Показать PROMO (Скидки на VPS)${NC}"
     echo -e "4) ${RED}Удалить прокси${NC}"
     echo -e "0) Выход${NC}"
-    read -p "Пункт: " m_idx
+    read -p "Выберите пункт: " m_idx
     case $m_idx in
         1) menu_install ;;
-        2) show_config; read -p "Enter..." ;;
+        2) show_config; read -p "Нажмите Enter для возврата..." ;;
         3) show_promo ;;
-        4) docker stop mtproto-proxy && docker rm mtproto-proxy && echo "Удалено" ;;
+        4) docker stop mtproto-proxy && docker rm mtproto-proxy && echo -e "${GREEN}Удалено!${NC}" ;;
         0) show_exit; exit 0 ;;
     esac
 done
