@@ -12,34 +12,30 @@ GREEN='\033[0;32m'
 CYAN='\033[0;36m'
 YELLOW='\033[1;33m'
 MAGENTA='\033[0;35m'
+BLUE='\033[0;34m'
+WHITE='\033[1;37m'
 NC='\033[0m'
 
-# --- ПРОВЕРКИ И ПОДГОТОВКА ---
+# --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
+type_text() {
+    local text="$1"
+    for (( i=0; i<${#text}; i++ )); do echo -n "${text:$i:1}"; sleep 0.01; done
+    echo ""
+}
+
 check_root() {
-    if [ "$EUID" -ne 0 ]; then
-        echo -e "${RED}Ошибка: Запустите скрипт через sudo!${NC}"
-        exit 1
-    fi
+    if [ "$EUID" -ne 0 ]; then echo -e "${RED}Ошибка: sudo!${NC}"; exit 1; fi
 }
 
 install_deps() {
-    echo -e "${YELLOW}[*] Проверка зависимостей...${NC}"
     if ! command -v docker &> /dev/null; then
-        echo -e "${YELLOW}[*] Установка Docker...${NC}"
         curl -fsSL https://get.docker.com | sh
         systemctl enable --now docker
     fi
     if ! command -v qrencode &> /dev/null; then
-        echo -e "${YELLOW}[*] Установка qrencode...${NC}"
         apt-get update && apt-get install -y qrencode || yum install -y qrencode
     fi
-    
-    # Регистрация команды в системе
-    if [ "$0" != "$BINARY_PATH" ]; then
-        cp "$0" "$BINARY_PATH"
-        chmod +x "$BINARY_PATH"
-        ln -sf "$BINARY_PATH" "/usr/local/bin/GoTelegram"
-    fi
+    cp "$0" "$BINARY_PATH" && chmod +x "$BINARY_PATH"
 }
 
 get_ip() {
@@ -48,119 +44,95 @@ get_ip() {
     echo "$ip" | grep -E -o '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -n 1
 }
 
-get_current_port() {
-    local port
-    port=$(docker inspect mtproto-proxy --format='{{range $p, $conf := .HostConfig.PortBindings}}{{(index $conf 0).HostPort}}{{end}}' 2>/dev/null)
-    echo "${port:-443}"
+# --- ПРОМО БЛОК ---
+show_promo() {
+    clear
+    echo -e "${MAGENTA}╔══════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${MAGENTA}║          ХОСТИНГ, КОТОРЫЙ РАБОТАЕТ СО СКИДКОЙ ДО -60%         ║${NC}"
+    echo -e "${MAGENTA}╚══════════════════════════════════════════════════════════════╝${NC}"
+    echo -ne "${CYAN}"
+    type_text "  >>> $PROMO_LINK"
+    echo -ne "${NC}"
+    echo -e "\n${MAGENTA}❖ •••••••••••••••••• PROMO CODES ••••••••••••••••••• ❖${NC}"
+    printf "  ${YELLOW}%-12s${NC} : ${WHITE}%s${NC}\n" "OFF60" "60% скидка на первый месяц"
+    printf "  ${YELLOW}%-12s${NC} : ${WHITE}%s${NC}\n" "antenka20" "Буст 20% + 3% (от 3 мес)"
+    printf "  ${YELLOW}%-12s${NC} : ${WHITE}%s${NC}\n" "antenka12" "Буст 5% + 5% (от 12 мес)"
+    echo -e "${MAGENTA}❖ •••••••••••••••••••••••••••••••••••••••••••••••••• ❖${NC}"
+    echo -e "\n${YELLOW}Генерация QR-кода... (5 сек)${NC}"
+    for i in {5..1}; do echo -ne "$i..."; sleep 1; done
+    echo -e "\n"
+    qrencode -t ANSIUTF8 "$PROMO_LINK"
+    echo -e "${GREEN}Сканируйте камерой телефона для перехода!${NC}"
+    read -p "Нажмите Enter, чтобы продолжить..."
 }
 
-# --- ОСНОВНЫЕ ФУНКЦИИ ---
+# --- КОНФИГУРАЦИЯ И ВЫВОД ---
 show_config() {
     clear
-    if ! docker ps | grep -q "mtproto-proxy"; then
-        echo -e "${RED}Прокси не запущен! Сначала выберите пункт 1.${NC}"
-        return
-    fi
-    
+    if ! docker ps | grep -q "mtproto-proxy"; then echo -e "${RED}Прокси не запущен!${NC}"; return; fi
     SECRET=$(docker inspect mtproto-proxy --format='{{range .Config.Cmd}}{{.}} {{end}}' | awk '{print $NF}')
     IP=$(get_ip)
-    PORT=$(get_current_port)
-    CONF_LINK="tg://proxy?server=$IP&port=$PORT&secret=$SECRET"
+    PORT=$(docker inspect mtproto-proxy --format='{{range $p, $conf := .HostConfig.PortBindings}}{{(index $conf 0).HostPort}}{{end}}' 2>/dev/null)
+    CONF_LINK="tg://proxy?server=$IP&port=${PORT:-443}&secret=$SECRET"
 
-    echo -e "${GREEN}=== ПАНЕЛЬ ДАННЫХ ===${NC}"
+    echo -e "${GREEN}=== ПАНЕЛЬ ДАННЫХ (RU) ===${NC}"
     echo -e "IP: ${CYAN}$IP${NC} | Порт: ${CYAN}$PORT${NC}"
     echo -e "Secret: ${CYAN}$SECRET${NC}"
-    echo -e "\n${YELLOW}Ссылка для Telegram:${NC}"
-    echo -e "${MAGENTA}$CONF_LINK${NC}\n"
-    
+    echo -e "\n${BLUE}$CONF_LINK${NC}\n"
     qrencode -t ANSIUTF8 "$CONF_LINK"
-    echo -e "${YELLOW}Сканируйте QR-код для быстрого подключения${NC}"
+    echo -e "${YELLOW}Подключитесь через QR или ссылку выше.${NC}"
 }
 
 run_container() {
-    local domain=$1
-    local port=$2
-    
-    echo -e "${YELLOW}[*] Генерация ключа для $domain...${NC}"
+    local domain=$1; local port=$2
     SECRET=$(docker run --rm nineseconds/mtg:2 generate-secret --hex "$domain")
-    
-    docker stop mtproto-proxy &>/dev/null
-    docker rm mtproto-proxy &>/dev/null
-    
+    docker stop mtproto-proxy &>/dev/null; docker rm mtproto-proxy &>/dev/null
     docker run -d --name mtproto-proxy --restart always -p "$port":"$port" \
         nineseconds/mtg:2 simple-run -n 1.1.1.1 -i prefer-ipv4 0.0.0.0:"$port" "$SECRET" > /dev/null
-    
-    if [ $? -eq 0 ]; then
-        show_config
-    else
-        echo -e "${RED}Ошибка запуска! Возможно, порт $port занят другим процессом.${NC}"
-    fi
+    show_config
 }
 
 # --- МЕНЮ ---
 menu_install() {
     clear
-    echo -e "${CYAN}--- Выберите домен для маскировки (Fake TLS) ---${NC}"
+    show_promo
+    echo -e "\n${CYAN}--- Настройка маскировки ---${NC}"
     options=("habr.com" "google.com" "wikipedia.org" "rbc.ru" "Свой домен")
     for i in "${!options[@]}"; do echo -e "$((i+1))) ${options[$i]}"; done
-    read -p "Выбор: " d_idx
-    
-    case $d_idx in
-        5) read -p "Введите домен: " DOMAIN ;;
-        *) DOMAIN=${options[$((d_idx-1))]} ;;
-    esac
-    [[ -z "$DOMAIN" ]] && DOMAIN="habr.com"
+    read -p "Домен [1]: " d_idx
+    case $d_idx in 5) read -p "Домен: " DOMAIN ;; *) DOMAIN=${options[$((d_idx-1))]} ;; esac
+    DOMAIN=${DOMAIN:-habr.com}
 
-    echo -e "\n${CYAN}--- Выберите порт ---${NC}"
-    echo -e "1) 443 (Стандарт)"
-    echo -e "2) 8443"
-    echo -e "3) Свой порт"
-    read -p "Выбор: " p_idx
-    case $p_idx in
-        2) PORT=8443 ;;
-        3) read -p "Введите порт: " PORT ;;
-        *) PORT=443 ;;
-    esac
-    
+    read -p "Введите порт [443]: " PORT
+    PORT=${PORT:-443}
     run_container "$DOMAIN" "$PORT"
 }
 
-change_port() {
-    if ! docker ps | grep -q "mtproto-proxy"; then echo -e "${RED}Прокси не найден!${NC}"; return; fi
-    # Получаем текущий секрет, чтобы не менять его
-    SECRET=$(docker inspect mtproto-proxy --format='{{range .Config.Cmd}}{{.}} {{end}}' | awk '{print $NF}')
-    read -p "Введите новый порт: " NEW_PORT
-    run_container "dummy.com" "$NEW_PORT" # Домен не важен при готовом секрете
-}
-
-# --- ВЫХОД С QR ---
 show_exit() {
     clear
-    echo -e "${MAGENTA}💰 ПОДДЕРЖКА АВТОРА (CloudTips)${NC}"
+    echo -e "${MAGENTA}💰 ПОДДЕРЖКА АВТОРА И КАНАЛА${NC}"
     qrencode -t ANSIUTF8 "$TIP_LINK"
-    echo -e "Ссылка: $TIP_LINK"
-    echo -e "${YELLOW}Спасибо за использование!${NC}"
+    echo -e "CloudTips: ${YELLOW}$TIP_LINK${NC}"
+    echo -e "YouTube: ${CYAN}https://www.youtube.com/@antenkaru${NC}"
+    echo -e "\n${GREEN}Спасибо, что вы с нами!${NC}"
 }
 
-# --- ГЛАВНЫЙ ЦИКЛ ---
 check_root
 install_deps
 
 while true; do
-    echo -e "\n${MAGENTA}=== GoTelegram Manager ===${NC}"
+    echo -e "\n${MAGENTA}=== GoTelegram Manager (by anten-ka) ===${NC}"
     echo -e "1) ${GREEN}Установить / Обновить прокси${NC}"
-    echo -e "2) Показать QR и данные подключения"
-    echo -e "3) ${CYAN}Изменить порт${NC}"
+    echo -e "2) Показать данные подключения (QR)${NC}"
+    echo -e "3) ${YELLOW}Показать PROMO (Скидки на VPS)${NC}"
     echo -e "4) ${RED}Удалить прокси${NC}"
-    echo -e "0) Выход"
-    read -p "Выберите пункт: " main_idx
-    
-    case $main_idx in
+    echo -e "0) Выход${NC}"
+    read -p "Пункт: " m_idx
+    case $m_idx in
         1) menu_install ;;
-        2) show_config ;;
-        3) change_port ;;
+        2) show_config; read -p "Enter..." ;;
+        3) show_promo ;;
         4) docker stop mtproto-proxy && docker rm mtproto-proxy && echo "Удалено" ;;
         0) show_exit; exit 0 ;;
-        *) echo "Неверный выбор" ;;
     esac
 done
