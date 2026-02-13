@@ -10,7 +10,7 @@ WHITE='\033[1;37m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-# Пути и ссылки
+# Ссылки и пути
 ALIAS_PATH="/usr/local/bin/GoTelegram"
 ALIAS_LOWER="/usr/local/bin/gotelegram"
 TIP_LINK="https://pay.cloudtips.ru/p/7410814f"
@@ -63,19 +63,26 @@ show_promo() {
     echo -e "${MAGENTA}║          ХОСТИНГ, КОТОРЫЙ РАБОТАЕТ СО СКИДКОЙ ДО -60%         ║${NC}"
     echo -e "${MAGENTA}╚══════════════════════════════════════════════════════════════╝${NC}"
     echo ""
+
     echo -ne "${CYAN}"
     type_text "  >>> $PROMO_LINK"
     type_text "  >>> $PROMO_LINK"
     type_text "  >>> $PROMO_LINK"
     echo -ne "${NC}"
+
     echo ""
     echo -e "${MAGENTA}❖ •••••••••••••••••• PROMO CODES ••••••••••••••••••• ❖${NC}"
     echo ""
     printf "  ${YELLOW}%-12s${NC} : ${WHITE}%s${NC}\n" "OFF60" "60% скидка на первый месяц"
     echo -e "${BLUE}  . . . . . . . . . . . . . . . . . . . . . . . . . . ${NC}"
     printf "  ${YELLOW}%-12s${NC} : ${WHITE}%s${NC}\n" "antenka20" "Буст 20% + 3% (при оплате за 3 мес)"
+    echo -e "${BLUE}  . . . . . . . . . . . . . . . . . . . . . . . . . . ${NC}"
+    printf "  ${YELLOW}%-12s${NC} : ${WHITE}%s${NC}\n" "antenka6" "Буст 15% + 5% (при оплате за 6 мес)"
+    echo -e "${BLUE}  . . . . . . . . . . . . . . . . . . . . . . . . . . ${NC}"
+    printf "  ${YELLOW}%-12s${NC} : ${WHITE}%s${NC}\n" "antenka12" "Буст 5% + 5% (при оплате за 12 мес)"
     echo ""
     echo -e "${MAGENTA}❖ •••••••••••••••••••••••••••••••••••••••••••••••••• ❖${NC}"
+
     echo -e "\n${YELLOW}Генерация QR-кода... (5 сек)${NC}"
     for i in {5..1}; do echo -ne "$i..."; sleep 1; done
     echo ""
@@ -91,7 +98,7 @@ show_current_config() {
     IP=$(curl -s ifconfig.me)
     CONF_LINK="tg://proxy?server=$IP&port=443&secret=$SECRET"
     
-    echo -e "${GREEN}=== ДАННЫЕ ПОДКЛЮЧЕНИЯ ===${NC}"
+    echo -e "${GREEN}=== ПАНЕЛЬ ДАННЫХ (RU) ===${NC}"
     echo -e "IP: $IP | Port: 443"
     echo -e "Secret: $SECRET"
     echo -e "\n${BLUE}$CONF_LINK${NC}\n"
@@ -100,9 +107,9 @@ show_current_config() {
     echo -e "------------------------------------------------------"
     echo -e "${YELLOW}КАК ИМПОРТИРОВАТЬ ПРОКСИ:${NC}"
     echo -e "${WHITE}1)${NC} Скопировать ссылку выше в браузер или переслать в"
-    echo -e "   личные сообщения (например, самому себе или в Избранное)."
-    echo -e "${WHITE}2)${NC} Просто сосканировать телефоном QR-код выше и"
-    echo -e "   добавить в приложение Telegram."
+    echo -e "   личные сообщения (например самому себе или избранное)"
+    echo -e "${WHITE}2)${NC} Просто сосканировать телефоном QR код и добавить"
+    echo -e "   в приложение Proxy"
     echo -e "------------------------------------------------------"
 }
 
@@ -117,11 +124,15 @@ manage_proxy() {
     read -p "Выбор: " d_choice
     [[ "$d_choice" -eq 0 ]] && read -p "Домен: " SELECTED_DOMAIN || SELECTED_DOMAIN=${DOMAINS[$((d_choice-1))]}
     [[ -z "$SELECTED_DOMAIN" ]] && SELECTED_DOMAIN="habr.com"
+    
     docker stop mtproto-proxy >/dev/null 2>&1
     docker rm mtproto-proxy >/dev/null 2>&1
+    
     SECRET=$(docker run --rm nineseconds/mtg:2 generate-secret --hex "$SELECTED_DOMAIN")
+    
     docker run -d --name mtproto-proxy --restart always -p 443:443 \
         nineseconds/mtg:2 simple-run -n 1.1.1.1 -i prefer-ipv4 0.0.0.0:443 "$SECRET" > /dev/null
+    
     if [ "$(docker inspect -f '{{.State.Running}}' mtproto-proxy)" == "true" ]; then
         clear; show_current_config;
     else
@@ -130,6 +141,7 @@ manage_proxy() {
     read -p "Enter для возврата..."
 }
 
+# --- QR НА ЧАЙ (ПРИ ВЫХОДЕ) ---
 show_tips() {
     clear
     echo -e "${MAGENTA}💰 БЛАГОДАРНОСТЬ АВТОРУ${NC}"
@@ -138,13 +150,17 @@ show_tips() {
     echo -e "Спасибо за использование GoTelegram!"
 }
 
+# --- МЕНЮ ---
 show_menu() {
     while true; do
         clear
-        echo -e "${MAGENTA}******************************************************"
+        echo -e "${MAGENTA}"
+        echo "******************************************************"
         echo "        anten-ka канал представляет..."
         echo "        YouTube: https://www.youtube.com/@antenkaru"
-        echo "******************************************************${NC}"
+        echo "******************************************************"
+        echo -e "${NC}"
+        
         echo -e "${YELLOW}Получить инструкции:${NC}"
         echo -e "1 способ: ${BLUE}https://boosty.to/anten-ka${NC}"
         echo -e "2 способ: ${BLUE}https://antenka.taplink.ws${NC}"
@@ -152,6 +168,7 @@ show_menu() {
         echo ""
         echo -e "${GREEN}💰 Задонатить каналу и автору:${NC} $TIP_LINK"
         echo -e "------------------------------------------------------"
+        
         echo -e "1) ${GREEN}Установить / Обновить прокси${NC}"
         echo -e "2) Показать QR и ссылку прокси"
         echo -e "3) ${RED}Удалить прокси${NC}"
