@@ -95,7 +95,7 @@ show_promo() {
 show_current_config() {
     if ! docker ps | grep -q "mtproto-proxy"; then echo -e "${RED}Прокси не запущен.${NC}"; return; fi
     SECRET=$(docker inspect mtproto-proxy --format='{{range .Config.Cmd}}{{.}} {{end}}' | awk '{print $NF}')
-    IP=$(curl -s ifconfig.me)
+    IP=$(curl -s -m 5 https://ifconfig.me || curl -s -m 5 https://api.ipify.org || curl -s -m 5 https://ident.me)
     CONF_LINK="tg://proxy?server=$IP&port=443&secret=$SECRET"
     
     echo -e "${GREEN}=== ПАНЕЛЬ ДАННЫХ (RU) ===${NC}"
